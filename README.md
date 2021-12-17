@@ -51,17 +51,24 @@ This library currently has a size limit per event of 25MB, based on the [Log Ana
 
 You can build the library using either Docker or Maven.  All commands are intended to be run from the base directory of the repository.
 
+The jar files that will be produced are:
+
+**`spark-listeners_<Spark Version>_<Scala Version>-<Version>.jar`** - This is the generic implementation of the Spark Listener framework that provides capability for collecting data from the running cluster for forwarding to another logging system.
+
+**`spark-listeners-loganalytics_<Spark Version>_<Scala Version>-<Version>.jar`** - This is the specific implementation that extends **spark-listeners**.  This project provides the implementation for connecting to Log Analytics and formatting and passing data via the Log Analytics API.
+
 ### Option 1: Docker
 
 Linux:
 
 ```bash
 # To build all profiles:
-chmod +x ./build.sh
 docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 maven:3.6.3-jdk-8 /spark-monitoring/build.sh
+```
 
+```bash
 # To build a single profile (latest long term support version):
-docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.0.1"
+docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.1.2"
 ```
 
 Windows:
@@ -69,9 +76,11 @@ Windows:
 ```bash
 # To build all profiles:
 docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 maven:3.6.3-jdk-8 /spark-monitoring/build.sh
+```
 
+```bash
 # To build a single profile (latest long term support version):
-docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.0.1"
+docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.1.2"
 ```
 
 ### Option 2: Maven
@@ -133,7 +142,7 @@ Now the _ResourceId **/subscriptions/11111111-5c17-4032-ae54-fc33d56047c2/resour
 1. Use the Azure Databricks CLI to copy all of the jar files from the **src/target** folder to the directory created in step 3:
 
     ```bash
-    dbfs cp --overwrite --recursive src/target/*.jar dbfs:/databricks/spark-monitoring/
+    dbfs cp --overwrite --recursive src/target/ dbfs:/databricks/spark-monitoring/
     ```
 
 ### Create and configure the Azure Databricks cluster
@@ -141,7 +150,7 @@ Now the _ResourceId **/subscriptions/11111111-5c17-4032-ae54-fc33d56047c2/resour
 1. Navigate to your Azure Databricks workspace in the Azure Portal.
 1. On the home page, click "new cluster".
 1. Choose a name for your cluster and enter it in "cluster name" text box.
-1. In the "Databricks Runtime Version" dropdown, select **7.3 LTS (includes Apache Spark 3.0.1, Scala 2.12)**.
+1. In the "Databricks Runtime Version" dropdown, select **9.1 LTS (includes Apache Spark 3.1.2, Scala 2.12)**.
 1. Under "Advanced Options", click on the "Init Scripts" tab. Go to the last line under the "Init Scripts section" Under the "destination" dropdown, select "DBFS". Enter "dbfs:/databricks/spark-monitoring/spark-monitoring.sh" in the text box. Click the "add" button.
 1. Click the "create cluster" button to create the cluster. Next, click on the "start" button to start the cluster.
 
@@ -158,6 +167,8 @@ databricks runtime.
 | `6.4` | `scala-2.11_spark-2.4.5` |
 | `7.3` - `7.6` | `scala-2.12_spark-3.0.1` |
 | `8.0` - `8.3` | `scala-2.12_spark-3.1.1` |
+| `8.4` - `9.1` | `scala-2.12_spark-3.1.2` |
+| `10.0` - `10.1` | `scala-2.12_spark-3.2.0` |
 
 1. Use Maven to build the POM located at `sample/spark-sample-job/pom.xml` or run the following Docker command:
 
@@ -175,11 +186,17 @@ databricks runtime.
 
 1. Navigate to your Databricks workspace and create a new job, as described [here](https://docs.azuredatabricks.net/user-guide/jobs.html#create-a-job).
 
-1. In the job detail page, select **Set JAR**.
-
-1. Upload the JAR file from `/src/spark-jobs/target/spark-jobs-1.0-SNAPSHOT.jar`.
+1. In the job detail page, set **Type** to `JAR`.
 
 1. For **Main class**, enter `com.microsoft.pnp.samplejob.StreamingQueryListenerSampleJob`.
+
+1. Upload the JAR file from `/src/spark-jobs/target/spark-jobs-1.0-SNAPSHOT.jar` in the **Dependent Libraries** section.
+
+1. Select the cluster you created previously in the **Cluster** section.
+
+1. Select **Create**.
+
+1. Click the **Run Now** button to launch the job.
 
 When the job runs, you can view the application logs and metrics in your Log Analytics workspace. After you verify the metrics appear, stop the sample application job.
 
@@ -188,26 +205,61 @@ When the job runs, you can view the application logs and metrics in your Log Ana
 After your sample job has run for a few minutes, you should be able to query for
 these event types in Log Analytics:
 
-```sh
-SparkListenerEvent_CL
+#### SparkListenerEvent_CL
+
+This custom log will contain Spark events that are serialized to JSON. You can limit the volume of events in this log with [filtering](docs/filtering.md#limiting-events-in-sparklistenerevent_cl). If filtering is not employed, this can be a large volume of data.
+
+> Note: There is a known issue when the Spark framework or workload generates events that have more than 500 fields, or where data for an individual field is larger than 32kb. Log Analytics will generate an error indicating that data has been dropped. This is an incompatibility between the data being generated by Spark, and the current limitations of the Log Analytics API.
+
+Example for querying **SparkListenerEvent_CL** for job throughput over the last 7 days:
+
+```kusto
+let results=SparkListenerEvent_CL
+| where TimeGenerated > ago(7d)
+| where  Event_s == "SparkListenerJobStart"
+| extend metricsns=column_ifexists("Properties_spark_metrics_namespace_s",Properties_spark_app_id_s)
+| extend apptag=iif(isnotempty(metricsns),metricsns,Properties_spark_app_id_s)
+| project Job_ID_d,apptag,Properties_spark_databricks_clusterUsageTags_clusterName_s,TimeGenerated
+| order by TimeGenerated asc nulls last
+| join kind= inner (
+    SparkListenerEvent_CL
+    | where Event_s == "SparkListenerJobEnd"
+    | where Job_Result_Result_s == "JobSucceeded"
+    | project Event_s,Job_ID_d,TimeGenerated
+) on Job_ID_d;
+results
+| extend slice=strcat("#JobsCompleted ",Properties_spark_databricks_clusterUsageTags_clusterName_s,"-",apptag)
+| summarize count() by bin(TimeGenerated, 1h),slice
+| order by TimeGenerated asc nulls last
+```
+
+#### SparkLoggingEvent_CL
+
+This custom log will contain data forwarded from Log4j (the standard logging system in Spark). The volume of logging can be controlled by [altering the level of logging](docs/filtering.md#limiting-logs-in-sparkloggingevent_cl-basic) to forward or with [filtering](docs/filtering.md#limiting-logs-in-sparkloggingevent_cl-advanced).
+
+Example for querying **SparkLoggingEvent_CL** for logged errors over the last day:
+
+```kusto
 SparkLoggingEvent_CL
-SparkMetric_CL
+| where TimeGenerated > ago(1d)
+| where Level == "ERROR"
 ```
 
-One example of querying logs is:
+#### SparkMetric_CL
 
-```sh
-SparkLoggingEvent_CL | where logger_name_s contains "com.microsoft.pnp"
-```
+This custom log will contain metrics events as generated by the Spark framework or workload. You can adjust the time period or sources included by modifying [the `METRICS_PROPERTIES` section of the spark-monitoring.sh](src/spark-listeners/scripts/spark-monitoring.sh#L63-L76) script or by [enabling filtering](docs/filtering.md#limiting-metrics-in-sparkmetric_cl).
 
-Another example of querying metrics:
+Example of querying **SparkMetric_CL** for the number of active executors per application over the last 7 days summarized every 15 minutes:
 
-```sh
+```kusto
 SparkMetric_CL
-| where name_s contains "executor.cpuTime"
-| extend sname = split(name_s, ".")
-| extend executor=strcat(sname[0], ".", sname[1])
-| project TimeGenerated, cpuTime=count_d / 100000
+| where TimeGenerated > ago(7d)
+| extend sname=split(name_s, ".")
+| where sname[2] == "executor"
+| extend executor=strcat(sname[1]) 
+| extend app=strcat(sname[0])
+| summarize NumExecutors=dcount(executor) by bin(TimeGenerated,  15m),app
+| order by TimeGenerated asc nulls last
 ```
 
 > Note: For more details on how to use the saved search queries in [logAnalyticsDeploy.json](/perftools/deployment/loganalytics/logAnalyticsDeploy.json) to understand and troubleshoot performance, see [Observability patterns and metrics for performance tuning](https://docs.microsoft.com/azure/architecture/databricks-monitoring/databricks-observability).
