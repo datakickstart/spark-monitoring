@@ -63,24 +63,24 @@ Linux:
 
 ```bash
 # To build all profiles:
-docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 maven:3.6.3-jdk-8 /spark-monitoring/build.sh
+docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 mcr.microsoft.com/java/maven:8-zulu-debian10 /spark-monitoring/build.sh
 ```
 
 ```bash
 # To build a single profile (latest long term support version):
-docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.1.2"
+docker run -it --rm -v `pwd`:/spark-monitoring -v "$HOME/.m2":/root/.m2 -w /spark-monitoring/src mcr.microsoft.com/java/maven:8-zulu-debian10 mvn install -P "scala-2.12_spark-3.1.2"
 ```
 
 Windows:
 
 ```bash
 # To build all profiles:
-docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 maven:3.6.3-jdk-8 /spark-monitoring/build.sh
+docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 mcr.microsoft.com/java/maven:8-zulu-debian10 /spark-monitoring/build.sh
 ```
 
 ```bash
 # To build a single profile (latest long term support version):
-docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-monitoring/src maven:3.6.3-jdk-8 mvn install -P "scala-2.12_spark-3.1.2"
+docker run -it --rm -v %cd%:/spark-monitoring -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-monitoring/src mcr.microsoft.com/java/maven:8-zulu-debian10 mvn install -P "scala-2.12_spark-3.1.2"
 ```
 
 ### Option 2: Maven
@@ -163,25 +163,23 @@ databricks runtime.
 
 | Databricks Runtime(s) | Maven Profile |
 | -- | -- |
-| `5.5` | `scala-2.11_spark-2.4.3` |
-| `6.4` | `scala-2.11_spark-2.4.5` |
-| `7.3` - `7.6` | `scala-2.12_spark-3.0.1` |
-| `8.0` - `8.3` | `scala-2.12_spark-3.1.1` |
-| `8.4` - `9.1` | `scala-2.12_spark-3.1.2` |
-| `10.0` - `10.1` | `scala-2.12_spark-3.2.0` |
+| `6.4 Extended Support` | `scala-2.11_spark-2.4.5` |
+| `7.3 LTS` | `scala-2.12_spark-3.0.1` |
+| `9.0` - `9.1 LTS` | `scala-2.12_spark-3.1.2` |
+| `10.0` - `10.2` | `scala-2.12_spark-3.2.0` |
 
 1. Use Maven to build the POM located at `sample/spark-sample-job/pom.xml` or run the following Docker command:
 
     Linux:
 
     ```bash
-    docker run -it --rm -v `pwd`/sample/spark-sample-job:/spark-sample-job -v "$HOME/.m2":/root/.m2 -w /spark-sample-job maven:3.6.3-jdk-8 mvn install -P <maven-profile>
+    docker run -it --rm -v `pwd`/sample/spark-sample-job:/spark-sample-job -v "$HOME/.m2":/root/.m2 -w /spark-sample-job mcr.microsoft.com/java/maven:8-zulu-debian10 mvn install -P <maven-profile>
     ```
 
     Windows:
 
     ```bash
-    docker run -it --rm -v %cd%/sample/spark-sample-job:/spark-sample-job -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-sample-job maven:3.6.3-jdk-8 mvn install -P <maven-profile>
+    docker run -it --rm -v %cd%/sample/spark-sample-job:/spark-sample-job -v "%USERPROFILE%/.m2":/root/.m2 -w /spark-sample-job mcr.microsoft.com/java/maven:8-zulu-debian10 mvn install -P <maven-profile>
     ```
 
 1. Navigate to your Databricks workspace and create a new job, as described [here](https://docs.azuredatabricks.net/user-guide/jobs.html#create-a-job).
